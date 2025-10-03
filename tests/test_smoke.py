@@ -83,3 +83,112 @@ class TestFileOrganizerSmoke:
                 for ext in extensions:
                     assert ext.startswith(".")
                     assert ext.islower()
+
+    def test_organize_by_type_dry_run(self):
+        """Test dry-run functionality for organize_by_type."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create sample files
+            (temp_path / "test.jpg").touch()
+            (temp_path / "document.pdf").touch()
+            (temp_path / "script.py").touch()
+            (temp_path / "unknown.xyz").touch()
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_type(dry_run=True)
+            
+            # Check that files are categorized correctly
+            assert "images/" in result
+            assert "documents/" in result
+            assert "code/" in result
+            assert "other/" in result
+            
+            assert "test.jpg" in result["images/"]
+            assert "document.pdf" in result["documents/"]
+            assert "script.py" in result["code/"]
+            assert "unknown.xyz" in result["other/"]
+            
+            # Verify no directories were actually created
+            assert not (temp_path / "images").exists()
+            assert not (temp_path / "documents").exists()
+            assert not (temp_path / "code").exists()
+            assert not (temp_path / "other").exists()
+
+    def test_organize_by_type_real_run(self):
+        """Test actual file organization."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create sample files
+            (temp_path / "test.jpg").touch()
+            (temp_path / "document.pdf").touch()
+            (temp_path / "script.py").touch()
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_type(dry_run=False)
+            
+            # Check that files were moved correctly
+            assert "images/" in result
+            assert "documents/" in result
+            assert "code/" in result
+            
+            assert "test.jpg" in result["images/"]
+            assert "document.pdf" in result["documents/"]
+            assert "script.py" in result["code/"]
+            
+            # Verify directories were created and files moved
+            assert (temp_path / "images" / "test.jpg").exists()
+            assert (temp_path / "documents" / "document.pdf").exists()
+            assert (temp_path / "code" / "script.py").exists()
+            
+            # Verify original files are gone
+            assert not (temp_path / "test.jpg").exists()
+            assert not (temp_path / "document.pdf").exists()
+            assert not (temp_path / "script.py").exists()
+
+    def test_organize_skip_existing_files(self):
+        """Test that existing files in destination are skipped."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create a file and its destination directory
+            (temp_path / "test.jpg").touch()
+            (temp_path / "images").mkdir()
+            (temp_path / "images" / "test.jpg").touch()
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_type(dry_run=False)
+            
+            # Should not move the file since it already exists in destination
+            assert "images/" in result
+            assert result["images/"] == []  # No files moved
+
+    def test_organize_empty_directory(self):
+        """Test organizing an empty directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_type(dry_run=False)
+            assert result == {}
+
+    def test_preview_organization_uses_dry_run(self):
+        """Test that preview_organization uses dry-run internally."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create sample files
+            (temp_path / "test.jpg").touch()
+            (temp_path / "document.pdf").touch()
+            
+            organizer = FileOrganizer(temp_dir)
+            preview = organizer.preview_organization()
+            
+            # Check that files are in preview
+            assert "images/" in preview
+            assert "documents/" in preview
+            assert "test.jpg" in preview["images/"]
+            assert "document.pdf" in preview["documents/"]
+            
+            # Verify no directories were created (dry-run behavior)
+            assert not (temp_path / "images").exists()
+            assert not (temp_path / "documents").exists()

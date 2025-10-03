@@ -1,9 +1,8 @@
 """Main file organizer module."""
 
-import os
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 
 class FileOrganizer:
@@ -65,30 +64,46 @@ class FileOrganizer:
         
         return files_by_type
 
-    def organize_by_type(self, target_directory: Optional[str | Path] = None) -> None:
+    def organize_by_type(self, dry_run: bool = False) -> Dict[str, List[str]]:
         """Organize files by type into subdirectories.
         
         Args:
-            target_directory: Directory to organize files into. 
-                             If None, uses source_directory.
+            dry_run: If True, only preview what would be moved without actually moving files.
+            
+        Returns:
+            Dictionary mapping destination directories to lists of filenames that were/would be moved.
         """
-        if target_directory is None:
-            target_directory = self.source_directory
-        else:
-            target_directory = Path(target_directory)
-            target_directory.mkdir(parents=True, exist_ok=True)
-        
         files_by_type = self.scan_directory()
+        moved_files: Dict[str, List[str]] = {}
         
         for file_type, files in files_by_type.items():
-            type_directory = target_directory / file_type
+            if not files:  # Skip empty categories
+                continue
+                
+            type_directory = self.source_directory / file_type
             type_directory.mkdir(exist_ok=True)
+            
+            moved_files[f"{file_type}/"] = []
             
             for file_path in files:
                 destination = type_directory / file_path.name
-                if not destination.exists():
-                    shutil.move(str(file_path), str(destination))
-                    print(f"Moved {file_path.name} to {type_directory}")
+                
+                # Skip if file already exists in destination
+                if destination.exists():
+                    continue
+                
+                if dry_run:
+                    print(f"[DRY RUN] Would move {file_path.name} to {type_directory}")
+                    moved_files[f"{file_type}/"].append(file_path.name)
+                else:
+                    try:
+                        shutil.move(str(file_path), str(destination))
+                        print(f"Moved {file_path.name} to {type_directory}")
+                        moved_files[f"{file_type}/"].append(file_path.name)
+                    except Exception as e:
+                        print(f"Error moving {file_path.name}: {e}")
+        
+        return moved_files
 
     def preview_organization(self) -> Dict[str, List[str]]:
         """Preview what files would be moved where.
@@ -96,10 +111,4 @@ class FileOrganizer:
         Returns:
             Dictionary mapping destination directories to lists of filenames.
         """
-        files_by_type = self.scan_directory()
-        preview: Dict[str, List[str]] = {}
-        
-        for file_type, files in files_by_type.items():
-            preview[f"{file_type}/"] = [file.name for file in files]
-        
-        return preview
+        return self.organize_by_type(dry_run=True)

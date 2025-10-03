@@ -1,6 +1,8 @@
 """Smoke tests for the file organizer package."""
 
+import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -192,3 +194,129 @@ class TestFileOrganizerSmoke:
             # Verify no directories were created (dry-run behavior)
             assert not (temp_path / "images").exists()
             assert not (temp_path / "documents").exists()
+
+    def test_organize_by_date_dry_run(self):
+        """Test dry-run functionality for organize_by_date."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create files with specific modification times
+            file1 = temp_path / "test1.jpg"
+            file2 = temp_path / "test2.pdf"
+            file1.touch()
+            file2.touch()
+            
+            # Set fixed modification times
+            # File 1: January 15, 2023
+            mtime1 = datetime(2023, 1, 15, 10, 30, 0).timestamp()
+            os.utime(file1, (mtime1, mtime1))
+            
+            # File 2: March 22, 2024
+            mtime2 = datetime(2024, 3, 22, 14, 45, 0).timestamp()
+            os.utime(file2, (mtime2, mtime2))
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_date(dry_run=True)
+            
+            # Check that files are categorized by date
+            assert "2023/01/" in result
+            assert "2024/03/" in result
+            
+            assert "test1.jpg" in result["2023/01/"]
+            assert "test2.pdf" in result["2024/03/"]
+            
+            # Verify no directories were actually created
+            assert not (temp_path / "2023").exists()
+            assert not (temp_path / "2024").exists()
+
+    def test_organize_by_date_real_run(self):
+        """Test actual file organization by date."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create files with specific modification times
+            file1 = temp_path / "test1.jpg"
+            file2 = temp_path / "test2.pdf"
+            file1.touch()
+            file2.touch()
+            
+            # Set fixed modification times
+            # File 1: January 15, 2023
+            mtime1 = datetime(2023, 1, 15, 10, 30, 0).timestamp()
+            os.utime(file1, (mtime1, mtime1))
+            
+            # File 2: March 22, 2024
+            mtime2 = datetime(2024, 3, 22, 14, 45, 0).timestamp()
+            os.utime(file2, (mtime2, mtime2))
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_date(dry_run=False)
+            
+            # Check that files were moved correctly
+            assert "2023/01/" in result
+            assert "2024/03/" in result
+            
+            assert "test1.jpg" in result["2023/01/"]
+            assert "test2.pdf" in result["2024/03/"]
+            
+            # Verify directories were created and files moved
+            assert (temp_path / "2023" / "01" / "test1.jpg").exists()
+            assert (temp_path / "2024" / "03" / "test2.pdf").exists()
+            
+            # Verify original files are gone
+            assert not (temp_path / "test1.jpg").exists()
+            assert not (temp_path / "test2.pdf").exists()
+
+    def test_organize_by_date_idempotent(self):
+        """Test that date organization is idempotent (can be run multiple times safely)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create a file with specific modification time
+            file1 = temp_path / "test1.jpg"
+            file1.touch()
+            
+            # Set fixed modification time: January 15, 2023
+            mtime1 = datetime(2023, 1, 15, 10, 30, 0).timestamp()
+            os.utime(file1, (mtime1, mtime1))
+            
+            organizer = FileOrganizer(temp_dir)
+            
+            # First run
+            result1 = organizer.organize_by_date(dry_run=False)
+            assert "2023/01/" in result1
+            assert "test1.jpg" in result1["2023/01/"]
+            
+            # Second run - should not move anything since file is already in destination
+            result2 = organizer.organize_by_date(dry_run=False)
+            assert result2 == {}  # No files moved in second run
+            
+            # Verify file is still in the correct location
+            assert (temp_path / "2023" / "01" / "test1.jpg").exists()
+
+    def test_organize_by_date_same_month(self):
+        """Test organizing multiple files from the same month."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create multiple files
+            files = ["file1.jpg", "file2.pdf", "file3.py"]
+            for filename in files:
+                file_path = temp_path / filename
+                file_path.touch()
+                
+                # Set all files to the same month (March 2024)
+                mtime = datetime(2024, 3, 15, 12, 0, 0).timestamp()
+                os.utime(file_path, (mtime, mtime))
+            
+            organizer = FileOrganizer(temp_dir)
+            result = organizer.organize_by_date(dry_run=False)
+            
+            # All files should be in the same directory
+            assert "2024/03/" in result
+            assert len(result["2024/03/"]) == 3
+            
+            for filename in files:
+                assert filename in result["2024/03/"]
+                assert (temp_path / "2024" / "03" / filename).exists()
+                assert not (temp_path / filename).exists()

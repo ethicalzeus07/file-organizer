@@ -17,9 +17,10 @@ def create_parser() -> argparse.ArgumentParser:
         description="Organize files in a directory by type",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+        Examples:
   %(prog)s --path /path/to/directory --dry-run
   %(prog)s --path /path/to/directory --mode type
+  %(prog)s --path /path/to/directory --mode date --dry-run
         """,
     )
     
@@ -32,9 +33,9 @@ Examples:
     
     parser.add_argument(
         "--mode",
-        choices=["type"],
+        choices=["type", "date"],
         default="type",
-        help="Organization mode (default: type)",
+        help="Organization mode: 'type' for file extension, 'date' for modification date (default: type)",
     )
     
     parser.add_argument(
@@ -64,10 +65,20 @@ def main() -> None:
     try:
         organizer = FileOrganizer(path)
         
+        # Choose organization method based on mode
+        if args.mode == "type":
+            mode_description = "by type"
+            organize_func = organizer.organize_by_type
+        elif args.mode == "date":
+            mode_description = "by date (YYYY/MM)"
+            organize_func = organizer.organize_by_date
+        else:
+            raise ValueError(f"Unknown mode: {args.mode}")
+        
         if args.dry_run:
-            print(f"Dry run mode: Previewing organization of files in '{path}'")
+            print(f"Dry run mode: Previewing organization of files in '{path}' {mode_description}")
             print("-" * 50)
-            moved_files = organizer.organize_by_type(dry_run=True)
+            moved_files = organize_func(dry_run=True)
             
             if not moved_files:
                 print("No files to organize.")
@@ -75,9 +86,9 @@ def main() -> None:
                 total_files = sum(len(files) for files in moved_files.values())
                 print(f"\nSummary: {total_files} files would be organized into {len(moved_files)} categories")
         else:
-            print(f"Organizing files in '{path}' by type...")
+            print(f"Organizing files in '{path}' {mode_description}...")
             print("-" * 50)
-            moved_files = organizer.organize_by_type(dry_run=False)
+            moved_files = organize_func(dry_run=False)
             
             if not moved_files:
                 print("No files to organize.")

@@ -1,6 +1,8 @@
 """Main file organizer module."""
 
+import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -81,7 +83,7 @@ class FileOrganizer:
                 continue
                 
             type_directory = self.source_directory / file_type
-            type_directory.mkdir(exist_ok=True)
+            type_directory.mkdir(parents=True, exist_ok=True)
             
             moved_files[f"{file_type}/"] = []
             
@@ -102,6 +104,55 @@ class FileOrganizer:
                         moved_files[f"{file_type}/"].append(file_path.name)
                     except Exception as e:
                         print(f"Error moving {file_path.name}: {e}")
+        
+        return moved_files
+
+    def organize_by_date(self, dry_run: bool = False) -> Dict[str, List[str]]:
+        """Organize files by modification date into YYYY/MM subdirectories.
+        
+        Args:
+            dry_run: If True, only preview what would be moved without actually moving files.
+            
+        Returns:
+            Dictionary mapping destination directories to lists of filenames that were/would be moved.
+        """
+        moved_files: Dict[str, List[str]] = {}
+        
+        for file_path in self.source_directory.iterdir():
+            if not file_path.is_file():
+                continue
+            
+            # Get modification time
+            mtime = os.path.getmtime(file_path)
+            mod_date = datetime.fromtimestamp(mtime)
+            
+            # Create YYYY/MM directory structure
+            year = mod_date.strftime("%Y")
+            month = mod_date.strftime("%m")
+            date_directory = self.source_directory / year / month
+            date_directory.mkdir(parents=True, exist_ok=True)
+            
+            destination = date_directory / file_path.name
+            dir_key = f"{year}/{month}/"
+            
+            # Initialize directory key if not exists
+            if dir_key not in moved_files:
+                moved_files[dir_key] = []
+            
+            # Skip if file already exists in destination
+            if destination.exists():
+                continue
+            
+            if dry_run:
+                print(f"[DRY RUN] Would move {file_path.name} to {date_directory}")
+                moved_files[dir_key].append(file_path.name)
+            else:
+                try:
+                    shutil.move(str(file_path), str(destination))
+                    print(f"Moved {file_path.name} to {date_directory}")
+                    moved_files[dir_key].append(file_path.name)
+                except Exception as e:
+                    print(f"Error moving {file_path.name}: {e}")
         
         return moved_files
 
